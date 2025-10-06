@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<form id="searchForm">
+  <fieldset>
+    <legend>Search Case</legend>
+    <label>Portal
+      <select name="portal" id="portal">
+        <option value="HIGH_COURT">High Court (HC Services)</option>
+        <option value="DISTRICT_COURT">District Court (eCourts Services)</option>
+      </select>
+    </label>
+    <div id="hcFields">
+      <label>High Court
+        <select name="high_court" required>
+          <option value="">Select High Court</option>
+          <option value="Allahabad">Allahabad High Court</option>
+          <option value="Bombay">Bombay High Court</option>
+          <option value="Delhi">Delhi High Court</option>
+          <option value="Madras">Madras High Court</option>
+          <option value="Calcutta">Calcutta High Court</option>
+          <option value="Karnataka">Karnataka High Court</option>
+          <option value="Gujarat">Gujarat High Court</option>
+          <option value="HimachalPradesh">Himachal Pradesh High Court</option>
+          <option value="PunjabAndHaryana">Punjab & Haryana High Court</option>
+          <option value="Rajasthan">Rajasthan High Court</option>
+          <option value="Hyderabad">Hyderabad High Court</option>
+          <option value="Patna">Patna High Court</option>
+          <option value="Jharkhand">Jharkhand High Court</option>
+          <option value="Uttarakhand">Uttarakhand High Court</option>
+          <option value="Chhattisgarh">Chhattisgarh High Court</option>
+          <option value="Tripura">Tripura High Court</option>
+          <option value="Manipur">Manipur High Court</option>
+          <option value="Sikkim">Sikkim High Court</option>
+          <option value="JammuAndKashmir">Jammu & Kashmir High Court</option>
+          <option value="ArunachalPradesh">Arunachal Pradesh High Court</option>
+          <option value="Nagaland">Nagaland High Court</option>
+          <option value="Meghalaya">Meghalaya High Court</option>
+          <option value="Assam">Assam High Court</option>
+          <option value="Orissa">Orissa High Court</option>
+          <option value="Kerala">Kerala High Court</option>
+          <option value="Mizoram">Mizoram High Court</option>
+        </select>
+      </label>
+    </div>
+    <div id="distFields" style="display:none">
+      <label>State code
+        <input type="text" name="state" placeholder="e.g., 03"/>
+      </label>
+      <label>District code
+        <input type="text" name="district" placeholder="e.g., 01"/>
+      </label>
+      <label>Establishment code (optional)
+        <input type="text" name="establishment" placeholder="optional"/>
+      </label>
+    </div>
+    <label>Case Type
+      <input type="text" name="case_type" required placeholder="e.g., WP, CR, CS"/>
+    </label>
+    <label>Case Number
+      <input type="text" name="case_number" required/>
+    </label>
+    <label>Year
+      <input type="text" name="case_year" required placeholder="YYYY"/>
+    </label>
+  </fieldset>
+  <button type="submit">Search</button>
+</form>
+
+<div id="captchaBox" style="display:none">
+  <p>Enter CAPTCHA to proceed:</p>
+  <img id="captchaImg" alt="captcha" />
+  <form id="captchaForm">
+    <input type="text" name="captchaText" required/>
+    <input type="hidden" name="sessionId" id="sessionId"/>
+    <button type="submit">Submit CAPTCHA</button>
+  </form>
+  <div id="captchaError" class="error"></div>
+</div>
+
+<div id="results"></div>
+
+<script>
+const portalEl = document.getElementById('portal');
+const hcFields = document.getElementById('hcFields');
+const distFields = document.getElementById('distFields');
+portalEl.addEventListener('change', () => {
+  if (portalEl.value === 'HIGH_COURT') { hcFields.style.display='block'; distFields.style.display='none'; }
+  else { hcFields.style.display='none'; distFields.style.display='block'; }
+});
+
+const searchForm = document.getElementById('searchForm');
+const captchaBox = document.getElementById('captchaBox');
+const captchaImg = document.getElementById('captchaImg');
+const sessionIdInput = document.getElementById('sessionId');
+const captchaForm = document.getElementById('captchaForm');
+const resultsDiv = document.getElementById('results');
+const captchaError = document.getElementById('captchaError');
+
+searchForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  resultsDiv.innerHTML = '';
+  captchaError.textContent = '';
+  const formData = new FormData(searchForm);
+  const payload = Object.fromEntries(formData.entries());
+  const res = await fetch('/start-search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  const data = await res.json();
+  if (data.error) { resultsDiv.innerHTML = '<p class="error">'+data.error+'</p>'; return; }
+  sessionIdInput.value = data.sessionId;
+  captchaImg.src = 'data:image/png;base64,' + data.captchaImageBase64;
+  captchaBox.style.display = 'block';
+});
+
+captchaForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  captchaError.textContent = '';
+  const formData = new FormData(captchaForm);
+  const res = await fetch('/solve-captcha', {method:'POST', body: formData});
+  const data = await res.json();
+  if (data.captchaError) {
+    captchaError.textContent = data.message || 'Incorrect CAPTCHA';
+    if (data.captchaImageBase64) captchaImg.src = 'data:image/png;base64,' + data.captchaImageBase64;
+    return;
+  }
+  if (data.error) { resultsDiv.innerHTML = '<p class="error">'+data.error+'</p>'; captchaBox.style.display='none'; return; }
+  captchaBox.style.display='none';
+  // Render parsed details
+  const p = data.parsed || {};
+  let html = '<h3>Case Details</h3>';
+  html += '<ul>';
+  html += `<li>Parties: ${p.parties || '-'}</li>`;
+  html += `<li>Filing Date: ${p.filing_date || '-'}</li>`;
+  html += `<li>Next Hearing Date: ${p.next_hearing_date || '-'}</li>`;
+  html += `<li>Status: ${p.case_status || '-'}</li>`;
+  html += '</ul>';
+  html += '<h3>Judgments/Orders</h3>';
+  if (data.orders && data.orders.length) {
+    html += '<ul>';
+    data.orders.forEach(o => {
+      html += `<li>${o.date ? o.date+' — ' : ''}${o.title} — <a href="${o.downloadUrl}" target="_blank">Download PDF</a></li>`;
+    });
+    html += '</ul>';
+  } else {
+    html += '<p>No orders found.</p>';
+  }
+  resultsDiv.innerHTML = html;
+});
+</script>
+{% endblock %}
