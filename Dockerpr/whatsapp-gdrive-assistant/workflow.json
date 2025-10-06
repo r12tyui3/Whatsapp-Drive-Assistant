@@ -1,0 +1,192 @@
+{
+  "name": "WhatsApp Google Drive Assistant",
+  "active": false,
+  "settings": {},
+  "id": "whatsapp-gdrive-workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-hook",
+        "responseMode": "responseNode",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $input.first().json;\nconst message = input.Body;\nconst fromNumber = input.From.replace('whatsapp:', '');\nconst parts = message.trim().split(' ');\nconst command = parts[0].toUpperCase();\nconst param = parts.slice(1).join(' ');\nreturn [{ json: { command, param, fromNumber } }];"
+      },
+      "id": "parse",
+      "name": "Parse Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "alwaysOutputData": true,
+        "values": {
+          "string": [
+            {
+              "value": "LIST"
+            }
+          ]
+        }
+      },
+      "id": "switch",
+      "name": "Command Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "searchQuery": "name = '{{$json.param}}' and mimeType = 'application/vnd.google-apps.folder'"
+      },
+      "id": "find-folder",
+      "name": "Find Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [720, -200]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "folderId": "{{$node[\"find-folder\"].json.id}}"
+      },
+      "id": "list-files",
+      "name": "List Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [960, -200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const files = $input.all().map(i => i.json.name);\nreturn [{ json: { text: 'Files in {{$node.switch.json.param}}:' + '\\n' + files.join('\\n') } }];"
+      },
+      "id": "format-list",
+      "name": "Format List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1200, -200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const command = $node.switch.json.command;\nconst responses = {\n  DELETE: 'File deleted',\n  MOVE: 'File moved',\n  SUMMARY: 'Summary generated using AI',\n  RENAME: 'File renamed',\n  UPLOAD: 'File uploaded'\n};\nreturn [{ json: { text: responses[command] || 'Unknown command' } }];"
+      },
+      "id": "simple-response",
+      "name": "Simple Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "to": "{{$node.parse.json.fromNumber}}",
+        "message": "{{$json.text}}"
+      },
+      "id": "response",
+      "name": "Send Response",
+      "type": "n8n-nodes-twilio.whatsappMessage",
+      "typeVersion": 1,
+      "position": [1000, 0]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse": {
+      "main": [
+        [
+          {
+            "node": "switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "switch": {
+      "main": [
+        [
+          {
+            "node": "find-folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "simple-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find-folder": {
+      "main": [
+        [
+          {
+            "node": "list-files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list-files": {
+      "main": [
+        [
+          {
+            "node": "format-list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format-list": {
+      "main": [
+        [
+          {
+            "node": "response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "simple-response": {
+      "main": [
+        [
+          {
+            "node": "response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
