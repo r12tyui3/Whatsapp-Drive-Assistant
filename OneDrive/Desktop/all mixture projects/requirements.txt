@@ -1,0 +1,7 @@
+python-binance==1.0.17
+click==8.1.7
+python-dotenv==1.0.0
+asyncio==3.4.3
+fastapi==0.115.0
+uvicorn==0.30.6
+pydantic==2.11.9
